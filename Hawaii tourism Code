@@ -1,0 +1,93 @@
+import pandas as pd
+from prophet import Prophet
+import matplotlib.pyplot as plt
+
+#  Load visitor arrival data
+us_visitors_df = pd.read_excel("2025-us-total.xlsx", sheet_name="2025P")
+japan_visitors_df = pd.read_excel("2025-japan.xlsx", sheet_name="2025P")
+
+#  Extract total visitor row from each file
+def extract_total_visitors_row(df, label="TOTAL VISITORS"):
+    return df[df.iloc[:, 1] == label].iloc[0]
+
+us_row = extract_total_visitors_row(us_visitors_df)
+japan_row = extract_total_visitors_row(japan_visitors_df)
+
+#  Define months and match to visitor counts 
+months_abbr = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL"]
+month_to_num = {"JAN": "01", "FEB": "02", "MAR": "03", "APR": "04", "MAY": "05", "JUN": "06", "JUL": "07"}
+
+us_visitors = us_row[2:2+len(months_abbr)].values
+japan_visitors = japan_row[2:2+len(months_abbr)].values
+
+# Estimated average spend per market (can be improved with real HTA data)
+avg_spend = {
+    "US": 220,
+    "Japan": 250
+}
+
+#   Build actual revenue DataFrame
+records = []
+for i, month in enumerate(months_abbr):
+    date = pd.to_datetime(f"2025-{month_to_num[month]}-01")
+    records.append(["US", date, us_visitors[i], avg_spend["US"], us_visitors[i] * avg_spend["US"], "Actual"])
+    records.append(["Japan", date, japan_visitors[i], avg_spend["Japan"], japan_visitors[i] * avg_spend["Japan"], "Actual"])
+
+df_revenue = pd.DataFrame(records, columns=["Market", "Date", "Visitors", "AvgSpend", "Revenue", "Type"])
+
+#   Prepare data for Prophet forecast
+def prepare_prophet_input(df, market):
+    filtered = df[df["Market"] == market]
+    return filtered[["Date", "Revenue"]].rename(columns={"Date": "ds", "Revenue": "y"})
+
+prophet_input_us = prepare_prophet_input(df_revenue, "US")
+prophet_input_japan = prepare_prophet_input(df_revenue, "Japan")
+
+#   Train Prophet models
+model_us = Prophet()
+model_us.fit(prophet_input_us)
+
+model_japan = Prophet()
+model_japan.fit(prophet_input_japan)
+
+#   Forecast next 6 months
+future_dates = 6  # Forecast through Jan 2026
+forecast_us_df = model_us.predict(model_us.make_future_dataframe(periods=future_dates, freq='MS'))
+forecast_japan_df = model_japan.predict(model_japan.make_future_dataframe(periods=future_dates, freq='MS'))
+
+# Keep only Aug 2025 – Jan 2026 predictions
+forecast_us = forecast_us_df[forecast_us_df["ds"] > "2025-07-31"][["ds", "yhat"]]
+forecast_us["Market"] = "US"
+
+forecast_japan = forecast_japan_df[forecast_japan_df["ds"] > "2025-07-31"][["ds", "yhat"]]
+forecast_japan["Market"] = "Japan"
+
+forecast_all = pd.concat([forecast_us, forecast_japan])
+forecast_all = forecast_all.rename(columns={"ds": "Date", "yhat": "Revenue"})
+forecast_all["Type"] = "Forecast"
+
+#  Combine actual + forecasted revenue
+df_combined = pd.concat([
+    df_revenue[["Date", "Market", "Revenue", "Type"]],
+    forecast_all[["Date", "Market", "Revenue", "Type"]]
+])
+df_combined = df_combined.sort_values(by=["Market", "Date"])
+
+#  Save to CSV
+df_combined.to_csv("tourism_revenue_forecast.csv", index=False)
+
+print(" Final dataset with actual and forecasted revenue exported to 'tourism_revenue_forecast.csv'")
+print(df_combined)
+
+#  Plotting
+fig_us = model_us.plot(forecast_us_df)
+plt.title("US Tourism Revenue Forecast")
+plt.xlabel("Date")
+plt.ylabel("Revenue (USD)")
+plt.show()
+
+fig_japan = model_japan.plot(forecast_japan_df)
+plt.title("Japan Tourism Revenue Forecast")
+plt.xlabel("Date")
+plt.ylabel("Revenue (USD)")
+plt.show()
