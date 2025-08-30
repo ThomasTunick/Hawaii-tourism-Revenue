@@ -10,6 +10,6 @@ Visualized the data in Power BI, it is a little simple but just getting used to 
 #Pictures
 Below is the Power BI dashboard and the plot geenerated by Prophet
 
-![Dashboard 1](./Screenshot%202025-08-29%20234305.png)
-![Dashboard 2](./Screenshot%202025-08-29%20234236.png)
-![Dashboard 3](./Screenshot%202025-08-29%20234243.png)
+(./Screenshot%202025-08-29%20234305.png)
+(./Screenshot%202025-08-29%20234236.png)
+(./Screenshot%202025-08-29%20234243.png)
